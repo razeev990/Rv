@@ -90,4 +90,84 @@ class ExampleUnitTest {
     )
     assertEquals(710, task.downloadedMb)
   }
+
+  @Test
+  fun tmdbIdExtraction_andServerUrls_handlePrefixesAndCuratedIds() {
+    // 1. Prefix stripping
+    assertEquals("1596275", com.example.ui.components.extractNumericTmdbId("tmdb_movie_1596275"))
+    assertEquals("1022789", com.example.ui.components.extractNumericTmdbId("tmdb_tv_1022789"))
+    assertEquals("533535", com.example.ui.components.extractNumericTmdbId("movie_533535"))
+    assertEquals("1596275", com.example.ui.components.extractNumericTmdbId("1596275"))
+    // IMDb IDs should not be treated as numeric TMDB ID
+    assertEquals("", com.example.ui.components.extractNumericTmdbId("tt15398776"))
+
+    // 2. resolveTmdbId resolves prefixes and curated titles like Dunki
+    assertEquals("1596275", com.example.ui.components.resolveTmdbId("tmdb_movie_1596275", "Custom Film"))
+    assertEquals("1072790", com.example.ui.components.resolveTmdbId("curated_dunki", "Dunki"))
+    assertEquals("872906", com.example.ui.components.resolveTmdbId("curated_jawan", "Jawan"))
+    assertEquals("838209", com.example.ui.components.resolveTmdbId("curated_pushpa_2", "Pushpa 2: The Rule"))
+
+    // 3. Test all 6 servers outputting clean URLs
+    val s1 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_1,
+      tmdbId = "tmdb_movie_1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1
+    )
+    assertEquals("https://vidsrc.mov/embed/movie/1596275", s1)
+
+    val s2 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_2,
+      tmdbId = "tmdb_movie_1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1
+    )
+    assertEquals("https://autoembed.cc/embed/movie/1596275", s2)
+
+    val s3 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_3,
+      tmdbId = "tmdb_movie_1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1
+    )
+    assertEquals("https://superembed.stream/embed/movie/?id=1596275", s3)
+
+    val s4 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_4,
+      tmdbId = "tmdb_movie_1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1
+    )
+    assertEquals("https://vidsrc.me/embed/movie?tmdb=1596275", s4)
+
+    val s5 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_5,
+      tmdbId = "1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1,
+      youtubeVideoId = "ACKQDAlAfFE"
+    )
+    assertEquals("https://www.youtube.com/embed/ACKQDAlAfFE", s5)
+
+    val s6 = com.example.ui.components.buildStreamingServerUrl(
+      server = com.example.ui.components.PlayerStreamMode.FULL_MOVIE_SERVER_6,
+      tmdbId = "1596275",
+      imdbId = "",
+      isSeries = false,
+      season = 1,
+      episode = 1,
+      youtubeVideoId = "ACKQDAlAfFE"
+    )
+    assertEquals("https://youtu.be/ACKQDAlAfFE", s6)
+  }
 }

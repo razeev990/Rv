@@ -361,59 +361,122 @@ private fun computeFullDurationMs(
   return movieMinutes * 60 * 1000
 }
 
-fun resolveTmdbId(mediaId: String, title: String): String {
-  if (mediaId.isNotBlank() && mediaId.all { it.isDigit() }) {
-    return mediaId
+fun extractNumericTmdbId(idOrMedia: String): String {
+  val trimmed = idOrMedia.trim()
+  if (trimmed.isEmpty()) return ""
+  // If it is an IMDb ID starting with "tt", do not treat as numeric TMDB ID
+  if (trimmed.startsWith("tt", ignoreCase = true)) {
+    return ""
   }
-  val lower = title.lowercase(Locale.ROOT)
+  // Strip common prefixes like 'tmdb_movie_', 'tmdb_tv_', 'tmdb_', 'movie_', 'tv_'
+  val stripped = trimmed
+    .removePrefix("tmdb_movie_")
+    .removePrefix("tmdb_tv_")
+    .removePrefix("tmdb_")
+    .removePrefix("movie_")
+    .removePrefix("tv_")
+    .trim()
+
+  if (stripped.isNotBlank() && stripped.all { it.isDigit() }) {
+    return stripped
+  }
+  // Extract contiguous digits if present (e.g., from 'tmdb-1596275')
+  val digitsMatch = Regex("""\d{3,10}""").find(stripped)
+  return digitsMatch?.value ?: ""
+}
+
+fun resolveTmdbId(mediaId: String, title: String): String {
+  // 1. First check if mediaId has a clean numeric TMDB ID (e.g., '1596275' or 'tmdb_movie_1596275')
+  val cleanExtracted = extractNumericTmdbId(mediaId)
+  if (cleanExtracted.isNotBlank()) {
+    return cleanExtracted
+  }
+
+  // 2. Resolve known curated IDs or titles to their authentic TMDB ID
+  val lowerId = mediaId.lowercase(Locale.ROOT)
+  val lowerTitle = title.lowercase(Locale.ROOT)
+  val combined = "$lowerId $lowerTitle"
+
   return when {
-    lower.contains("inside out 2") -> "1022789"
-    lower.contains("deadpool") -> "533535"
-    lower.contains("dune") -> "693134"
-    lower.contains("oppenheimer") -> "872585"
-    lower.contains("spider-man") || lower.contains("spider-verse") -> "569094"
-    lower.contains("interstellar") -> "157336"
-    lower.contains("inception") -> "27205"
-    lower.contains("dark knight") -> "155"
-    lower.contains("stranger things") -> "66732"
-    lower.contains("breaking bad") -> "1396"
-    lower.contains("the last of us") -> "100088"
-    lower.contains("game of thrones") -> "1399"
-    lower.contains("house of the dragon") -> "94997"
-    lower.contains("loki") -> "88396"
-    lower.contains("fallout") -> "106379"
-    lower.contains("shogun") -> "126308"
-    lower.contains("the boys") -> "76479"
-    lower.contains("squid game") -> "93405"
-    lower.contains("wednesday") -> "119051"
-    mediaId.isNotBlank() -> mediaId
-    else -> "1022789"
+    combined.contains("inside out 2") -> "1022789"
+    combined.contains("deadpool") -> "533535"
+    combined.contains("dune") -> "693134"
+    combined.contains("oppenheimer") -> "872585"
+    combined.contains("spider-man") || combined.contains("spider-verse") -> "569094"
+    combined.contains("interstellar") -> "157336"
+    combined.contains("inception") -> "27205"
+    combined.contains("dark knight") -> "155"
+    combined.contains("kalki") -> "762441"
+    combined.contains("jawan") -> "872906"
+    combined.contains("pushpa") -> "838209"
+    combined.contains("dunki") -> "1072790"
+    combined.contains("sita ramam") -> "921355"
+    combined.contains("veer") && combined.contains("zaara") -> "24803"
+    combined.contains("rockstar") -> "79532"
+    combined.contains("brahmastra") -> "496331"
+    combined.contains("ramayana") -> "840705"
+    combined.contains("stranger things") -> "66732"
+    combined.contains("breaking bad") -> "1396"
+    combined.contains("the last of us") || combined.contains("last_of_us") -> "100088"
+    combined.contains("game of thrones") -> "1399"
+    combined.contains("house of the dragon") -> "94997"
+    combined.contains("loki") -> "88396"
+    combined.contains("fallout") -> "106379"
+    combined.contains("shogun") -> "126308"
+    combined.contains("the boys") -> "76479"
+    combined.contains("squid game") -> "93405"
+    combined.contains("wednesday") -> "119051"
+    combined.contains("mirzapur") -> "83631"
+    combined.contains("panchayat") -> "101602"
+    combined.contains("family man") -> "93121"
+    combined.contains("peaky") -> "60574"
+    combined.contains("farzi") -> "120089"
+    combined.contains("sacred") -> "79352"
+    mediaId.isNotBlank() && mediaId.all { it.isDigit() } -> mediaId
+    else -> "1022789" // Safe default: Inside Out 2
   }
 }
 
 fun resolveImdbId(imdbIdOrMediaId: String, title: String): String {
-  if (imdbIdOrMediaId.startsWith("tt")) return imdbIdOrMediaId
-  val lower = title.lowercase(Locale.ROOT)
+  val trimmed = imdbIdOrMediaId.trim()
+  if (trimmed.startsWith("tt", ignoreCase = true)) return trimmed
+  val lowerId = imdbIdOrMediaId.lowercase(Locale.ROOT)
+  val lowerTitle = title.lowercase(Locale.ROOT)
+  val combined = "$lowerId $lowerTitle"
   return when {
-    lower.contains("inside out 2") -> "tt22022452"
-    lower.contains("deadpool") -> "tt6263850"
-    lower.contains("dune") -> "tt15239678"
-    lower.contains("oppenheimer") -> "tt15398776"
-    lower.contains("spider-man") || lower.contains("spider-verse") -> "tt9362722"
-    lower.contains("interstellar") -> "tt0816692"
-    lower.contains("inception") -> "tt1375666"
-    lower.contains("dark knight") -> "tt0468569"
-    lower.contains("stranger things") -> "tt4574334"
-    lower.contains("breaking bad") -> "tt0903747"
-    lower.contains("the last of us") -> "tt3581920"
-    lower.contains("game of thrones") -> "tt0944947"
-    lower.contains("house of the dragon") -> "tt11198330"
-    lower.contains("loki") -> "tt9140554"
-    lower.contains("fallout") -> "tt12637874"
-    lower.contains("shogun") -> "tt2788310"
-    lower.contains("the boys") -> "tt1190634"
-    lower.contains("squid game") -> "tt10919420"
-    lower.contains("wednesday") -> "tt13443470"
+    combined.contains("inside out 2") -> "tt22022452"
+    combined.contains("deadpool") -> "tt6263850"
+    combined.contains("dune") -> "tt15239678"
+    combined.contains("oppenheimer") -> "tt15398776"
+    combined.contains("spider-man") || combined.contains("spider-verse") -> "tt9362722"
+    combined.contains("interstellar") -> "tt0816692"
+    combined.contains("inception") -> "tt1375666"
+    combined.contains("dark knight") -> "tt0468569"
+    combined.contains("kalki") -> "tt12735488"
+    combined.contains("jawan") -> "tt15354916"
+    combined.contains("pushpa") -> "tt14992922"
+    combined.contains("dunki") -> "tt15428134"
+    combined.contains("sita ramam") -> "tt20850406"
+    combined.contains("veer") && combined.contains("zaara") -> "tt0420332"
+    combined.contains("rockstar") -> "tt1839596"
+    combined.contains("brahmastra") -> "tt6277462"
+    combined.contains("stranger things") -> "tt4574334"
+    combined.contains("breaking bad") -> "tt0903747"
+    combined.contains("the last of us") || combined.contains("last_of_us") -> "tt3581920"
+    combined.contains("game of thrones") -> "tt0944947"
+    combined.contains("house of the dragon") -> "tt11198330"
+    combined.contains("loki") -> "tt9140554"
+    combined.contains("fallout") -> "tt12637874"
+    combined.contains("shogun") -> "tt2788310"
+    combined.contains("the boys") -> "tt1190634"
+    combined.contains("squid game") -> "tt10919420"
+    combined.contains("wednesday") -> "tt13443470"
+    combined.contains("mirzapur") -> "tt6473300"
+    combined.contains("panchayat") -> "tt12004706"
+    combined.contains("family man") -> "tt9544034"
+    combined.contains("peaky") -> "tt2442560"
+    combined.contains("farzi") -> "tt14234528"
+    combined.contains("sacred") -> "tt6077448"
     else -> "tt22022452"
   }
 }
@@ -430,28 +493,39 @@ fun buildStreamingServerUrl(
 ): String {
   val s = season.coerceAtLeast(1)
   val e = episode.coerceAtLeast(1)
+  // Ensure we pass only pure clean numeric TMDB ID
+  val cleanTmdb = extractNumericTmdbId(tmdbId).ifBlank { tmdbId.filter { it.isDigit() } }
+  val effectiveTmdb = cleanTmdb.ifBlank { "1022789" }
+  val effectiveImdb = if (imdbId.startsWith("tt", ignoreCase = true)) imdbId else "tt22022452"
+
   return when (server) {
     PlayerStreamMode.FULL_MOVIE_SERVER_1 -> {
       val timeParam = if (startSeconds > 0) "?time=$startSeconds#t=$startSeconds" else ""
-      if (isSeries) "https://vidsrc.mov/embed/tv/$tmdbId/$s/$e$timeParam"
-      else "https://vidsrc.mov/embed/movie/$tmdbId$timeParam"
+      if (isSeries) "https://vidsrc.mov/embed/tv/$effectiveTmdb/$s/$e$timeParam"
+      else "https://vidsrc.mov/embed/movie/$effectiveTmdb$timeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_2 -> {
       val timeParam = if (startSeconds > 0) "?t=$startSeconds#t=$startSeconds" else ""
-      if (isSeries) "https://autoembed.cc/embed/tv/$tmdbId/$s/$e$timeParam"
-      else "https://autoembed.cc/embed/movie/$tmdbId$timeParam"
+      if (isSeries) "https://autoembed.cc/embed/tv/$effectiveTmdb/$s/$e$timeParam"
+      else "https://autoembed.cc/embed/movie/$effectiveTmdb$timeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_3 -> {
       val timeParam = if (startSeconds > 0) "&start=$startSeconds#t=$startSeconds" else ""
       val movieTimeParam = if (startSeconds > 0) "&start=$startSeconds#t=$startSeconds" else ""
-      if (isSeries) "https://superembed.stream/embed/tv/?id=$tmdbId&s=$s&e=$e$timeParam"
-      else "https://superembed.stream/embed/movie/?id=$tmdbId$movieTimeParam"
+      if (isSeries) "https://superembed.stream/embed/tv/?id=$effectiveTmdb&s=$s&e=$e$timeParam"
+      else "https://superembed.stream/embed/movie/?id=$effectiveTmdb$movieTimeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_4 -> {
       val timeParam = if (startSeconds > 0) "&time=$startSeconds#t=$startSeconds" else ""
       val movieTimeParam = if (startSeconds > 0) "?time=$startSeconds#t=$startSeconds" else ""
-      if (isSeries) "https://vidsrc.me/embed/tv?imdb=$imdbId&season=$s&episode=$e$timeParam"
-      else "https://vidsrc.me/embed/movie?imdb=$imdbId$movieTimeParam"
+      // Server 4 (Vidsrc.me): Supports pure numeric TMDB ID with ?tmdb= (or ?imdb= if valid IMDb)
+      if (isSeries) {
+        if (effectiveTmdb.isNotBlank()) "https://vidsrc.me/embed/tv?tmdb=$effectiveTmdb&season=$s&episode=$e$timeParam"
+        else "https://vidsrc.me/embed/tv?imdb=$effectiveImdb&season=$s&episode=$e$timeParam"
+      } else {
+        if (effectiveTmdb.isNotBlank()) "https://vidsrc.me/embed/movie?tmdb=$effectiveTmdb$movieTimeParam"
+        else "https://vidsrc.me/embed/movie?imdb=$effectiveImdb$movieTimeParam"
+      }
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_5 -> {
       val vid = youtubeVideoId.ifBlank { "dQw4w9WgXcQ" }
