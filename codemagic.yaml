@@ -5,19 +5,16 @@ workflows:
     environment:
       java: 21
       vars:
-        # Aap apni TMDB API key yahan bhi environment variable ke taur par secure rakh sakte hain
         TMDB_API_KEY: "001604f130b812c3b1663ee0986b968d"
     scripts:
       - name: Create local.properties and .env configuration
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
-      - name: Grant execute permission to gradlew
+      - name: Build Release APK and App Bundle (AAB) using Gradle
         script: |
-          chmod +x gradlew
-      - name: Build Release APK and App Bundle (AAB)
-        script: |
-          ./gradlew clean assembleRelease bundleRelease
+          # Agar gradlew file nahi hai toh direct gradle command use karein
+          gradle clean assembleRelease bundleRelease
     artifacts:
       - app/build/outputs/apk/release/*.apk
       - app/build/outputs/bundle/release/*.aab
@@ -28,3 +25,4 @@ workflows:
         notify:
           success: true
           failure: true
+          
