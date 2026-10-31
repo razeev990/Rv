@@ -11,10 +11,14 @@ workflows:
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
-      - name: Build Release APK and App Bundle (AAB) using Gradle
+      - name: Generate Gradle Wrapper (Gradle 9.3.1)
         script: |
-          # Agar gradlew file nahi hai toh direct gradle command use karein
-          gradle clean assembleRelease bundleRelease
+          # Agar gradlew missing hai toh ise automatically generate karein
+          gradle wrapper --gradle-version 9.3.1
+          chmod +x gradlew
+      - name: Build Release APK and App Bundle (AAB)
+        script: |
+          ./gradlew clean assembleRelease bundleRelease
     artifacts:
       - app/build/outputs/apk/release/*.apk
       - app/build/outputs/bundle/release/*.aab
@@ -25,4 +29,3 @@ workflows:
         notify:
           success: true
           failure: true
-          
