@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">CineVault</string>
+    <string name="auth_title">CineVault Global Cinema</string>
+    <string name="auth_subtitle">Explore every released &amp; upcoming movie and series worldwide. Watch trailers &amp; full movies in-app, explore actor filmographies, and permanently back up your Watched &amp; Want to Watch lists to your Google ID across all devices.</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="nav_discover">Explore</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_movies">Movie</string>
+    <string name="nav_upcoming">Upcoming</string>
+    <string name="nav_watchlist">My Lists</string>
+    <string name="nav_offline">Offline Mode</string>
+    <string name="status_watched">Watched</string>
+    <string name="status_want_to_watch">Want to Watch</string>
+    <string name="watch_trailer_in_app">Watch Trailer In-App</string>
+    <string name="watch_full_movie_in_app">Watch Movie Stream</string>
+    <string name="cast_section_title">Cast &amp; Actors (Tap Actor for Full Filmography)</string>
+    <string name="cloud_backup_badge">Lifetime Cloud Backup Active</string>
+    <string name="offline_mode_active">Offline Viewing Mode Active</string>
+    <string name="tv_voice_search_title">TV Voice Search</string>
+    <string name="tv_voice_search_prompt">Speak movie, actor, director, or genre…</string>
+    <string name="tv_voice_search_listening">Listening to TV remote mic…</string>
+</resources>

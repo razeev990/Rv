@@ -1,0 +1,120 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidWatchlistItem(data, userId) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.mediaId is string &&
+             data.mediaId.size() >= 1 &&
+             data.mediaId.size() <= 128 &&
+             data.mediaId.matches('^[a-zA-Z0-9_\\-]+$') &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 300 &&
+             data.mediaType is string &&
+             (data.mediaType == 'MOVIE' || data.mediaType == 'SERIES') &&
+             data.status is string &&
+             (data.status == 'WATCHED' || data.status == 'WANT_TO_WATCH') &&
+             data.releaseStatus is string &&
+             (data.releaseStatus == 'RELEASED' || data.releaseStatus == 'UPCOMING') &&
+             data.releaseYear is string &&
+             data.releaseYear.size() >= 1 &&
+             data.releaseYear.size() <= 20 &&
+             (data.rating is int || data.rating is float) &&
+             data.rating >= 0 &&
+             data.rating <= 10 &&
+             data.posterUrl is string &&
+             data.posterUrl.size() <= 1000 &&
+             data.overview is string &&
+             data.overview.size() <= 4000 &&
+             data.genres is string &&
+             data.genres.size() <= 300 &&
+             (!('backdropUrl' in data) || data.backdropUrl == null || (data.backdropUrl is string && data.backdropUrl.size() <= 1000)) &&
+             (!('trailerUrl' in data) || data.trailerUrl == null || (data.trailerUrl is string && data.trailerUrl.size() <= 1000)) &&
+             (!('fullMovieUrl' in data) || data.fullMovieUrl == null || (data.fullMovieUrl is string && data.fullMovieUrl.size() <= 1000)) &&
+             (!('castSummary' in data) || data.castSummary == null || (data.castSummary is string && data.castSummary.size() <= 5000)) &&
+             (!('userNotes' in data) || data.userNotes == null || (data.userNotes is string && data.userNotes.size() <= 1000)) &&
+             (!('userRating' in data) || data.userRating == null || (data.userRating is int && data.userRating >= 0 && data.userRating <= 10));
+    }
+
+    match /users/{userId}/watchlist/{mediaId} {
+      allow get: if isSignedIn() &&
+                    request.auth.uid == userId &&
+                    isValidId(userId) &&
+                    isValidId(mediaId);
+
+      allow list: if isSignedIn() &&
+                     request.auth.uid == userId &&
+                     isValidId(userId);
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(userId) &&
+                       isValidId(mediaId) &&
+                       incoming().mediaId == mediaId &&
+                       incoming().keys().hasAll([
+                         'userId', 'mediaId', 'title', 'mediaType', 'status',
+                         'releaseStatus', 'releaseYear', 'rating', 'posterUrl',
+                         'overview', 'genres', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'mediaId', 'title', 'mediaType', 'status',
+                         'releaseStatus', 'releaseYear', 'rating', 'posterUrl',
+                         'backdropUrl', 'overview', 'trailerUrl', 'fullMovieUrl',
+                         'genres', 'castSummary', 'userNotes', 'userRating',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidWatchlistItem(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidWatchlistItem(incoming(), userId) &&
+                       request.auth.uid == userId &&
+                       isValidId(userId) &&
+                       isValidId(mediaId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().mediaId == existing().mediaId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'mediaType', 'status', 'releaseStatus',
+                         'releaseYear', 'rating', 'posterUrl', 'backdropUrl',
+                         'overview', 'trailerUrl', 'fullMovieUrl', 'genres',
+                         'castSummary', 'userNotes', 'userRating', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(userId) &&
+                       isValidId(mediaId);
+    }
+  }
+}

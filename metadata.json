@@ -1,0 +1,6 @@
+{
+  "name": "CineVault",
+  "description": "Global movie and TV series catalog with in-app trailers, cast filmographies, cloud-synced Watched & Want to Watch lists, and offline viewing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

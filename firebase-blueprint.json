@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "WatchlistItem": {
+      "title": "WatchlistItem",
+      "description": "A movie or TV series saved by an authenticated user to their Watched or Want to Watch list for permanent cloud backup and offline viewing.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated Google user who owns this watchlist entry."
+        },
+        "mediaId": {
+          "type": "string",
+          "description": "Unique identifier of the movie or TV series."
+        },
+        "title": {
+          "type": "string",
+          "description": "Display title of the movie or series."
+        },
+        "mediaType": {
+          "type": "string",
+          "enum": ["MOVIE", "SERIES"],
+          "description": "Whether the entry is a movie or a TV series."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["WATCHED", "WANT_TO_WATCH"],
+          "description": "Watchlist status selected by the user."
+        },
+        "releaseStatus": {
+          "type": "string",
+          "enum": ["RELEASED", "UPCOMING"],
+          "description": "Whether the title is already released or upcoming."
+        },
+        "releaseYear": {
+          "type": "string",
+          "description": "Release year or date string."
+        },
+        "rating": {
+          "type": "number",
+          "description": "Global audience rating out of 10."
+        },
+        "posterUrl": {
+          "type": "string",
+          "description": "Poster image URL."
+        },
+        "backdropUrl": {
+          "type": "string",
+          "description": "Backdrop banner image URL."
+        },
+        "overview": {
+          "type": "string",
+          "description": "Plot summary of the movie or series."
+        },
+        "trailerUrl": {
+          "type": "string",
+          "description": "Direct MP4 or YouTube embed trailer URL."
+        },
+        "fullMovieUrl": {
+          "type": "string",
+          "description": "Direct stream URL for full movie playback when available."
+        },
+        "genres": {
+          "type": "string",
+          "description": "Comma-separated list of genres."
+        },
+        "castSummary": {
+          "type": "string",
+          "description": "Serialized cast summary for offline viewing."
+        },
+        "userNotes": {
+          "type": "string",
+          "description": "Optional personal review or notes by the user."
+        },
+        "userRating": {
+          "type": "integer",
+          "description": "Optional personal rating from 0 to 10."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the entry was created (must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the entry was last updated (must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "mediaId",
+        "title",
+        "mediaType",
+        "status",
+        "releaseStatus",
+        "releaseYear",
+        "rating",
+        "posterUrl",
+        "overview",
+        "genres",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/watchlist/{mediaId}": {
+      "schema": {
+        "$ref": "#/entities/WatchlistItem"
+      },
+      "description": "Per-user cloud-synced Watched and Want to Watch movie/series entries."
+    }
+  }
+}
