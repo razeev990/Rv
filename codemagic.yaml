@@ -1,0 +1,20 @@
+workflows:
+  android-debug-build:
+    name: cinevault Android Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      java: 17
+    scripts:
+      - name: Setup Gradle Wrapper
+        script: |
+          gradle wrapper --gradle-version 9.3.1
+          chmod +x gradlew
+      - name: Build Android APK
+        script: ./gradlew assembleDebug
+    artifacts:
+      - app/build/outputs/apk/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - razeev990@gmail.com
