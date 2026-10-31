@@ -12,8 +12,12 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Base64
 import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -421,40 +425,68 @@ fun buildStreamingServerUrl(
   isSeries: Boolean,
   season: Int,
   episode: Int,
-  youtubeVideoId: String = ""
+  youtubeVideoId: String = "",
+  startSeconds: Int = 0
 ): String {
   val s = season.coerceAtLeast(1)
   val e = episode.coerceAtLeast(1)
   return when (server) {
     PlayerStreamMode.FULL_MOVIE_SERVER_1 -> {
-      if (isSeries) "https://vidsrc.mov/embed/tv/$tmdbId/$s/$e"
-      else "https://vidsrc.mov/embed/movie/$tmdbId"
+      val timeParam = if (startSeconds > 0) "?time=$startSeconds#t=$startSeconds" else ""
+      if (isSeries) "https://vidsrc.mov/embed/tv/$tmdbId/$s/$e$timeParam"
+      else "https://vidsrc.mov/embed/movie/$tmdbId$timeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_2 -> {
-      if (isSeries) "https://autoembed.cc/embed/tv/$tmdbId/$s/$e"
-      else "https://autoembed.cc/embed/movie/$tmdbId"
+      val timeParam = if (startSeconds > 0) "?t=$startSeconds#t=$startSeconds" else ""
+      if (isSeries) "https://autoembed.cc/embed/tv/$tmdbId/$s/$e$timeParam"
+      else "https://autoembed.cc/embed/movie/$tmdbId$timeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_3 -> {
-      if (isSeries) "https://superembed.stream/embed/tv/?id=$tmdbId&s=$s&e=$e"
-      else "https://superembed.stream/embed/movie/?id=$tmdbId"
+      val timeParam = if (startSeconds > 0) "&start=$startSeconds#t=$startSeconds" else ""
+      val movieTimeParam = if (startSeconds > 0) "&start=$startSeconds#t=$startSeconds" else ""
+      if (isSeries) "https://superembed.stream/embed/tv/?id=$tmdbId&s=$s&e=$e$timeParam"
+      else "https://superembed.stream/embed/movie/?id=$tmdbId$movieTimeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_4 -> {
-      if (isSeries) "https://vidsrc.me/embed/tv?imdb=$imdbId&season=$s&episode=$e"
-      else "https://vidsrc.me/embed/movie?imdb=$imdbId"
+      val timeParam = if (startSeconds > 0) "&time=$startSeconds#t=$startSeconds" else ""
+      val movieTimeParam = if (startSeconds > 0) "?time=$startSeconds#t=$startSeconds" else ""
+      if (isSeries) "https://vidsrc.me/embed/tv?imdb=$imdbId&season=$s&episode=$e$timeParam"
+      else "https://vidsrc.me/embed/movie?imdb=$imdbId$movieTimeParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_5 -> {
       val vid = youtubeVideoId.ifBlank { "dQw4w9WgXcQ" }
-      "https://www.youtube.com/embed/$vid"
+      val startParam = if (startSeconds > 0) "?start=$startSeconds" else ""
+      "https://www.youtube.com/embed/$vid$startParam"
     }
     PlayerStreamMode.FULL_MOVIE_SERVER_6 -> {
       val vid = youtubeVideoId.ifBlank { "dQw4w9WgXcQ" }
-      "https://youtu.be/$vid"
+      val timeParam = if (startSeconds > 0) "?t=$startSeconds" else ""
+      "https://youtu.be/$vid$timeParam"
     }
     else -> ""
   }
 }
 
-private fun buildServerEmbedPlayerPage(embedUrl: String): String {
+private fun buildServerEmbedPlayerPage(embedUrl: String, startSeconds: Int = 0): String {
+  val seekScript = if (startSeconds > 0) {
+    """
+    <script>
+      window.addEventListener('load', function() {
+        var frame = document.getElementById('streamFrame');
+        if (frame && frame.contentWindow) {
+          setTimeout(function() {
+            try {
+              frame.contentWindow.postMessage({ event: 'seek', time: $startSeconds }, '*');
+              frame.contentWindow.postMessage({ action: 'seek', time: $startSeconds }, '*');
+              frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [$startSeconds, true] }), '*');
+            } catch(e) {}
+          }, 1200);
+        }
+      });
+    </script>
+    """.trimIndent()
+  } else ""
+
   return """
     <!DOCTYPE html>
     <html>
@@ -465,9 +497,7 @@ private fun buildServerEmbedPlayerPage(embedUrl: String): String {
         html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
         #streamFrame { width: 100%; height: 100%; border: none; display: block; }
       </style>
-      <script>
-        window.open = function() { return null; };
-      </script>
+      $seekScript
     </head>
     <body>
       <iframe
@@ -657,6 +687,16 @@ private val ALLOWED_STREAM_DOMAINS = listOf(
   "autoembed",
   "superembed.stream",
   "superembed",
+  "cloudnest",
+  "embed.su",
+  "mcloud",
+  "vidcloud",
+  "vidembed",
+  "rabbitstream",
+  "megacloud",
+  "vizcloud",
+  "filemoon",
+  "multiembed",
   "youtube.com",
   "youtu.be",
   "youtube-nocookie.com",
@@ -680,6 +720,16 @@ private val ALLOWED_STREAM_DOMAINS = listOf(
 
 private fun isBlockedAdOrTrackingUrl(urlStr: String?): Boolean {
   if (urlStr.isNullOrBlank()) return false
+  val lower = urlStr.lowercase(Locale.ROOT)
+  // Media streams, playlists, segments, subtitle files, and blob data must NEVER be blocked
+  if (lower.contains(".m3u8") || lower.contains(".ts") || lower.contains(".mp4") ||
+    lower.contains(".m4v") || lower.contains(".key") || lower.contains(".mpd") ||
+    lower.startsWith("blob:") || lower.startsWith("data:") || lower.contains(".vtt") ||
+    lower.contains(".srt")
+  ) {
+    return false
+  }
+
   val uri = runCatching { Uri.parse(urlStr) }.getOrNull() ?: return false
   val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: ""
   if (scheme in BLOCKED_INTENT_SCHEMES) return true
@@ -689,10 +739,18 @@ private fun isBlockedAdOrTrackingUrl(urlStr: String?): Boolean {
     if (BLOCKED_AD_DOMAINS.any { host == it || host.endsWith(".$it") }) {
       return true
     }
-    // Never block core primary player domains
+    // Never block core primary player domains and stream CDNs
     if (host.contains("vidsrc") ||
       host.contains("autoembed") ||
       host.contains("superembed") ||
+      host.contains("cloudnest") ||
+      host.contains("megacloud") ||
+      host.contains("rabbitstream") ||
+      host.contains("embed.su") ||
+      host.contains("mcloud") ||
+      host.contains("vidcloud") ||
+      host.contains("vidembed") ||
+      host.contains("filemoon") ||
       host.contains("youtube") ||
       host.contains("youtu.be") ||
       host.contains("googlevideo.com") ||
@@ -707,19 +765,14 @@ private fun isBlockedAdOrTrackingUrl(urlStr: String?): Boolean {
     }
   }
 
-  val fullUrlLower = urlStr.lowercase(Locale.ROOT)
-  return BLOCKED_AD_KEYWORDS.any { fullUrlLower.contains(it) }
+  return false
 }
 
 private fun isAllowedPlayerUrl(urlStr: String?, activeStreamUrl: String = ""): Boolean {
   if (urlStr.isNullOrBlank()) return true
   val lower = urlStr.lowercase(Locale.ROOT)
-  if (lower.startsWith("data:") || lower.startsWith("blob:") || lower.startsWith("about:")) {
-    return true
-  }
-  // Allow direct media / subtitle files
-  if (lower.contains(".mp4") || lower.contains(".m3u8") || lower.contains(".mpd") ||
-    lower.contains(".webm") || lower.contains(".vtt") || lower.contains(".srt")
+  if (lower.startsWith("data:") || lower.startsWith("blob:") || lower.startsWith("about:") ||
+    lower.startsWith("http://") || lower.startsWith("https://")
   ) {
     return true
   }
@@ -1029,23 +1082,9 @@ private fun CinemaPlayerContent(
     }
   }
 
-  // Distinct start offset per server so switching servers immediately jumps into a distinct segment
-  val initialVideoOffsetSec = remember(isTrailerMode, streamMode, selectedSeasonNumber, selectedEpisodeNumber) {
-    if (isTrailerMode) {
-      0
-    } else {
-      val serverOffset = when (streamMode) {
-        PlayerStreamMode.FULL_MOVIE_SERVER_1 -> 0
-        PlayerStreamMode.FULL_MOVIE_SERVER_2 -> 4
-        PlayerStreamMode.FULL_MOVIE_SERVER_3 -> 8
-        PlayerStreamMode.FULL_MOVIE_SERVER_4 -> 12
-        PlayerStreamMode.FULL_MOVIE_SERVER_5 -> 6
-        PlayerStreamMode.FULL_MOVIE_SERVER_6 -> 10
-        else -> 0
-      }
-      val epOffset = ((selectedSeasonNumber - 1) * 3 + (selectedEpisodeNumber - 1) * 2) % 8
-      serverOffset + epOffset
-    }
+  // Retain exact playback position across server switches (Server 1 -> Server 2, 3, etc.)
+  val resumeSeconds = remember(savedResumePositionMs, currentPositionMs, isTrailerMode) {
+    if (isTrailerMode) 0 else ((savedResumePositionMs.takeIf { it > 0 } ?: currentPositionMs) / 1000).coerceAtLeast(0)
   }
 
   val activeYoutubeVideoId = remember(
@@ -1103,7 +1142,8 @@ private fun CinemaPlayerContent(
     isSeries,
     selectedSeasonNumber,
     selectedEpisodeNumber,
-    activeYoutubeVideoId
+    activeYoutubeVideoId,
+    resumeSeconds
   ) {
     buildStreamingServerUrl(
       server = streamMode,
@@ -1112,7 +1152,8 @@ private fun CinemaPlayerContent(
       isSeries = isSeries,
       season = selectedSeasonNumber,
       episode = selectedEpisodeNumber,
-      youtubeVideoId = activeYoutubeVideoId ?: ""
+      youtubeVideoId = activeYoutubeVideoId ?: "",
+      startSeconds = resumeSeconds
     )
   }
 
@@ -1132,7 +1173,7 @@ private fun CinemaPlayerContent(
     activePlaylistForMode,
     isTrailerMode,
     streamMode,
-    initialVideoOffsetSec,
+    resumeSeconds,
     isMuted,
     playbackSpeed,
     currentServerEmbedUrl
@@ -1142,7 +1183,7 @@ private fun CinemaPlayerContent(
       PlayerStreamMode.FULL_MOVIE_SERVER_2,
       PlayerStreamMode.FULL_MOVIE_SERVER_3,
       PlayerStreamMode.FULL_MOVIE_SERVER_4 -> {
-        buildServerEmbedPlayerPage(embedUrl = currentServerEmbedUrl)
+        buildServerEmbedPlayerPage(embedUrl = currentServerEmbedUrl, startSeconds = resumeSeconds)
       }
       PlayerStreamMode.FULL_MOVIE_SERVER_5,
       PlayerStreamMode.FULL_MOVIE_SERVER_6,
@@ -1150,6 +1191,7 @@ private fun CinemaPlayerContent(
         val vid = activeYoutubeVideoId?.ifBlank { null } ?: "dQw4w9WgXcQ"
         buildYouTubeEmbedPlayerPage(
           videoId = vid,
+          startSeconds = resumeSeconds,
           isMuted = isMuted,
           playbackSpeed = playbackSpeed
         )
@@ -1158,6 +1200,7 @@ private fun CinemaPlayerContent(
         if (!activeYoutubeVideoId.isNullOrBlank()) {
           buildYouTubeEmbedPlayerPage(
             videoId = activeYoutubeVideoId,
+            startSeconds = 0,
             isMuted = isMuted,
             playbackSpeed = playbackSpeed
           )
@@ -1165,7 +1208,7 @@ private fun CinemaPlayerContent(
           buildHtml5CinemaPlayerPage(
             primaryUrl = activeUriString,
             backupUrls = activePlaylistForMode.drop(1),
-            startOffsetSec = initialVideoOffsetSec,
+            startOffsetSec = 0,
             isMuted = isMuted,
             playbackSpeed = playbackSpeed
           )
@@ -1175,7 +1218,7 @@ private fun CinemaPlayerContent(
         buildHtml5CinemaPlayerPage(
           primaryUrl = activeUriString,
           backupUrls = activePlaylistForMode.drop(1),
-          startOffsetSec = initialVideoOffsetSec,
+          startOffsetSec = resumeSeconds,
           isMuted = isMuted,
           playbackSpeed = playbackSpeed
         )
@@ -1426,11 +1469,21 @@ private fun CinemaPlayerContent(
             WebView(ctx).apply {
               webViewRef = this
               setBackgroundColor(AndroidColor.BLACK)
+
+              // 1. Enable third-party cookies and modern web storage
+              runCatching {
+                val cookieManager = CookieManager.getInstance()
+                cookieManager.setAcceptCookie(true)
+                cookieManager.setAcceptThirdPartyCookies(this, true)
+              }
+
               settings.javaScriptEnabled = true
               settings.mediaPlaybackRequiresUserGesture = false
               settings.domStorageEnabled = true
-              settings.setSupportMultipleWindows(false)
-              settings.javaScriptCanOpenWindowsAutomatically = false
+              @Suppress("DEPRECATION")
+              settings.databaseEnabled = true
+              settings.setSupportMultipleWindows(true)
+              settings.javaScriptCanOpenWindowsAutomatically = true
               settings.allowFileAccess = true
               settings.allowContentAccess = true
               @Suppress("DEPRECATION")
@@ -1441,16 +1494,18 @@ private fun CinemaPlayerContent(
               settings.cacheMode = WebSettings.LOAD_DEFAULT
               settings.loadWithOverviewMode = true
               settings.useWideViewPort = true
+              settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+
               runCatching {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                   settings.safeBrowsingEnabled = false
                 }
               }
+              // Explicitly enable hardware acceleration on the WebView instance as requested
               runCatching {
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
-              }.onFailure {
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
               }
+
               webChromeClient = object : WebChromeClient() {
                 override fun onCreateWindow(
                   view: WebView?,
@@ -1458,8 +1513,59 @@ private fun CinemaPlayerContent(
                   isUserGesture: Boolean,
                   resultMsg: android.os.Message?
                 ): Boolean {
-                  // Prevent unwanted popups and secondary windows
-                  return false
+                  if (resultMsg == null) return false
+                  val newWebView = WebView(view?.context ?: return false).apply {
+                    runCatching { setLayerType(View.LAYER_TYPE_HARDWARE, null) }
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    @Suppress("DEPRECATION")
+                    settings.databaseEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                    runCatching {
+                      CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                    }
+                    webViewClient = object : WebViewClient() {
+                      override fun shouldOverrideUrlLoading(
+                        wv: WebView?,
+                        request: WebResourceRequest?
+                      ): Boolean {
+                        val targetUrl = request?.url?.toString() ?: return false
+                        if (isBlockedAdOrTrackingUrl(targetUrl)) {
+                          return true
+                        }
+                        if (isAllowedPlayerUrl(targetUrl, activeUriString)) {
+                          webViewRef?.loadUrl(targetUrl)
+                          return true
+                        }
+                        return true
+                      }
+
+                      @Suppress("DEPRECATION")
+                      override fun shouldOverrideUrlLoading(wv: WebView?, url: String?): Boolean {
+                        if (url.isNullOrBlank()) return false
+                        if (isBlockedAdOrTrackingUrl(url)) return true
+                        if (isAllowedPlayerUrl(url, activeUriString)) {
+                          webViewRef?.loadUrl(url)
+                          return true
+                        }
+                        return true
+                      }
+                    }
+                  }
+                  val transport = resultMsg.obj as? WebView.WebViewTransport
+                  transport?.webView = newWebView
+                  resultMsg.sendToTarget()
+                  return true
+                }
+
+                override fun onPermissionRequest(request: PermissionRequest?) {
+                  request?.grant(request.resources)
+                }
+
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                  return true
                 }
               }
               webViewClient = object : WebViewClient() {
@@ -1481,21 +1587,36 @@ private fun CinemaPlayerContent(
                   isBuffering = false
                 }
 
+                override fun onReceivedError(
+                  view: WebView?,
+                  request: WebResourceRequest?,
+                  error: WebResourceError?
+                ) {
+                  super.onReceivedError(view, request, error)
+                  if (request?.isForMainFrame == true && html5PlayerPayload.isNotBlank()) {
+                    view?.loadDataWithBaseURL(
+                      currentBaseUrl,
+                      html5PlayerPayload,
+                      "text/html",
+                      "UTF-8",
+                      null
+                    )
+                  }
+                }
+
                 override fun shouldOverrideUrlLoading(
                   view: WebView?,
                   request: WebResourceRequest?
                 ): Boolean {
                   val targetUrl = request?.url?.toString() ?: return false
-                  // 1. Detect and block known ad networks and intent scheme hijack attempts
+                  val scheme = request.url?.scheme?.lowercase(Locale.ROOT) ?: ""
+                  if (scheme in BLOCKED_INTENT_SCHEMES) {
+                    return true
+                  }
                   if (isBlockedAdOrTrackingUrl(targetUrl)) {
                     return true
                   }
-                  // 2. Allow primary video stream, TMDB, and official video player content
-                  if (isAllowedPlayerUrl(targetUrl, activeUriString)) {
-                    return false
-                  }
-                  // 3. Block external ad redirects and unwanted popups
-                  return true
+                  return false
                 }
 
                 @Suppress("DEPRECATION")
@@ -1504,10 +1625,7 @@ private fun CinemaPlayerContent(
                   if (isBlockedAdOrTrackingUrl(url)) {
                     return true
                   }
-                  if (isAllowedPlayerUrl(url, activeUriString)) {
-                    return false
-                  }
-                  return true
+                  return false
                 }
 
                 override fun shouldInterceptRequest(
@@ -1515,8 +1633,14 @@ private fun CinemaPlayerContent(
                   request: WebResourceRequest?
                 ): WebResourceResponse? {
                   val reqUrl = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                  val lower = reqUrl.lowercase(Locale.ROOT)
+                  if (lower.contains(".m3u8") || lower.contains(".ts") || lower.contains(".mp4") ||
+                    lower.contains(".m4v") || lower.contains(".key") || lower.contains(".mpd") ||
+                    lower.startsWith("blob:") || lower.startsWith("data:")
+                  ) {
+                    return super.shouldInterceptRequest(view, request)
+                  }
                   if (isBlockedAdOrTrackingUrl(reqUrl)) {
-                    // Block ad and tracking network requests with an empty 204 response
                     return WebResourceResponse(
                       "text/plain",
                       "UTF-8",
@@ -1531,6 +1655,14 @@ private fun CinemaPlayerContent(
                   view: WebView?,
                   url: String?
                 ): WebResourceResponse? {
+                  if (url.isNullOrBlank()) return super.shouldInterceptRequest(view, url)
+                  val lower = url.lowercase(Locale.ROOT)
+                  if (lower.contains(".m3u8") || lower.contains(".ts") || lower.contains(".mp4") ||
+                    lower.contains(".m4v") || lower.contains(".key") || lower.contains(".mpd") ||
+                    lower.startsWith("blob:") || lower.startsWith("data:")
+                  ) {
+                    return super.shouldInterceptRequest(view, url)
+                  }
                   if (isBlockedAdOrTrackingUrl(url)) {
                     return WebResourceResponse(
                       "text/plain",
@@ -1543,26 +1675,66 @@ private fun CinemaPlayerContent(
               }
               val playTag = "${activeYoutubeVideoId ?: activeUriString}_${streamMode.name}_${selectedSeasonNumber}_${selectedEpisodeNumber}_$currentServerEmbedUrl"
               tag = playTag
-              loadDataWithBaseURL(
-                currentBaseUrl,
-                html5PlayerPayload,
-                "text/html",
-                "UTF-8",
-                null
-              )
+
+              val isDirectHttp = when (streamMode) {
+                PlayerStreamMode.FULL_MOVIE_SERVER_1,
+                PlayerStreamMode.FULL_MOVIE_SERVER_2,
+                PlayerStreamMode.FULL_MOVIE_SERVER_3,
+                PlayerStreamMode.FULL_MOVIE_SERVER_4 -> true
+                else -> false
+              }
+
+              if (isDirectHttp && currentServerEmbedUrl.startsWith("http")) {
+                loadUrl(
+                  currentServerEmbedUrl,
+                  mapOf(
+                    "Referer" to currentBaseUrl,
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                  )
+                )
+              } else {
+                loadDataWithBaseURL(
+                  currentBaseUrl,
+                  html5PlayerPayload,
+                  "text/html",
+                  "UTF-8",
+                  null
+                )
+              }
             }
           },
           update = { webView ->
             val expectedTag = "${activeYoutubeVideoId ?: activeUriString}_${streamMode.name}_${selectedSeasonNumber}_${selectedEpisodeNumber}_$currentServerEmbedUrl"
             if (webView.tag != expectedTag) {
               webView.tag = expectedTag
-              webView.loadDataWithBaseURL(
-                currentBaseUrl,
-                html5PlayerPayload,
-                "text/html",
-                "UTF-8",
-                null
-              )
+              webView.clearCache(true)
+              webView.stopLoading()
+
+              val isDirectHttp = when (streamMode) {
+                PlayerStreamMode.FULL_MOVIE_SERVER_1,
+                PlayerStreamMode.FULL_MOVIE_SERVER_2,
+                PlayerStreamMode.FULL_MOVIE_SERVER_3,
+                PlayerStreamMode.FULL_MOVIE_SERVER_4 -> true
+                else -> false
+              }
+
+              if (isDirectHttp && currentServerEmbedUrl.startsWith("http")) {
+                webView.loadUrl(
+                  currentServerEmbedUrl,
+                  mapOf(
+                    "Referer" to currentBaseUrl,
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                  )
+                )
+              } else {
+                webView.loadDataWithBaseURL(
+                  currentBaseUrl,
+                  html5PlayerPayload,
+                  "text/html",
+                  "UTF-8",
+                  null
+                )
+              }
             }
           }
         )
@@ -2223,6 +2395,10 @@ private fun CinemaPlayerContent(
                   savedResumePositionMs = currentPositionMs
                   streamMode = mode
                   isPlaying = true
+                  runCatching {
+                    webViewRef?.clearCache(true)
+                    webViewRef?.stopLoading()
+                  }
                 },
                 label = { Text(mode.label) },
                 leadingIcon = {
@@ -2792,10 +2968,12 @@ private fun searchYouTubeVideoIds(query: String, maxResults: Int = 8): List<Stri
  */
 private fun buildYouTubeEmbedPlayerPage(
   videoId: String,
+  startSeconds: Int = 0,
   isMuted: Boolean,
   playbackSpeed: Float
 ): String {
   val muteParam = if (isMuted) "&mute=1" else ""
+  val startParam = if (startSeconds > 0) "&start=$startSeconds" else ""
   return """
     <!DOCTYPE html>
     <html>
@@ -2810,7 +2988,7 @@ private fun buildYouTubeEmbedPlayerPage(
     <body>
       <iframe
         id="cinemaFrame"
-        src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&enablejsapi=1&playsinline=1&controls=1&rel=0&modestbranding=1$muteParam"
+        src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&enablejsapi=1&playsinline=1&controls=1&rel=0&modestbranding=1$startParam$muteParam"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen>
       </iframe>
