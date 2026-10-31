@@ -1,26 +1,26 @@
-workflows:
+ workflows:
   cinevault-debug-workflow:
-name: CineVault Personal Debug Workflow
-max_build_duration: 30
-environment:
-  java: 21
-  vars:
-    TMDB_API_KEY: "001604f130b812c3b1663ee0986b968d"
-scripts:
-  - name: Create local.properties and .env configuration
-    script: |
-      echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-      echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
-  - name: Generate Gradle Wrapper
-    script: |
-      gradle wrapper --gradle-version 9.3.1
-      chmod +x gradlew
-  - name: Generate Missing Debug Keystore
-    script: |
-      # Yeh command automatically debug.keystore file bana degi taaki signing error na aaye
-      keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-  - name: Build Debug APK for Personal Use
-    script: |
-      ./gradlew assembleDebug
-artifacts:
-  - app/build/outputs/apk/debug/*.apk
+    name: "CineVault Personal Debug Workflow"
+    max_build_duration: 30
+    environment:
+      java: 21
+      vars:
+        TMDB_API_KEY: "001604f130b812c3b1663ee0986b968d"
+    scripts:
+      - name: "Create local.properties and .env configuration"
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
+      - name: "Generate Gradle Wrapper"
+        script: |
+          gradle wrapper --gradle-version 9.3.1
+          chmod +x gradlew
+      - name: "Generate Missing Debug Keystore"
+        script: |
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - name: "Build Debug APK for Personal Use"
+        script: |
+          ./gradlew assembleDebug
+    artifacts:
+      - "app/build/outputs/apk/debug/*.apk"
+      
