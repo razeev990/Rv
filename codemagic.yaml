@@ -1,20 +1,30 @@
 workflows:
-  android-debug-build:
-    name: cinevault Android Build
-    max_build_duration: 120
-    instance_type: mac_mini_m1
+  cinevault-android-workflow:
+    name: CineVault Android & TV Workflow
+    max_build_duration: 60
     environment:
-      java: 17
+      java: 21
+      vars:
+        # Aap apni TMDB API key yahan bhi environment variable ke taur par secure rakh sakte hain
+        TMDB_API_KEY: "001604f130b812c3b1663ee0986b968d"
     scripts:
-      - name: Setup Gradle Wrapper
+      - name: Create local.properties and .env configuration
         script: |
-          gradle wrapper --gradle-version 9.3.1
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
+      - name: Grant execute permission to gradlew
+        script: |
           chmod +x gradlew
-      - name: Build Android APK
-        script: ./gradlew assembleDebug
+      - name: Build Release APK and App Bundle (AAB)
+        script: |
+          ./gradlew clean assembleRelease bundleRelease
     artifacts:
-      - app/build/outputs/apk/**/*.apk
+      - app/build/outputs/apk/release/*.apk
+      - app/build/outputs/bundle/release/*.aab
     publishing:
       email:
         recipients:
-          - razeev990@gmail.com
+          - rajeev990@gmail.com
+        notify:
+          success: true
+          failure: true
