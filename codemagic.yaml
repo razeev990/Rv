@@ -1,7 +1,7 @@
-workflows:
-  cinevault-android-workflow:
-    name: CineVault Android & TV Workflow
-    max_build_duration: 60
+ workflows:
+  cinevault-debug-workflow:
+    name: CineVault Personal Debug Workflow
+    max_build_duration: 30
     environment:
       java: 21
       vars:
@@ -11,21 +11,12 @@ workflows:
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "TMDB_API_KEY=$TMDB_API_KEY" > .env
-      - name: Generate Gradle Wrapper (Gradle 9.3.1)
+      - name: Generate Gradle Wrapper
         script: |
-          # Agar gradlew missing hai toh ise automatically generate karein
           gradle wrapper --gradle-version 9.3.1
           chmod +x gradlew
-      - name: Build Release APK and App Bundle (AAB)
+      - name: Build Debug APK for Personal Use
         script: |
-          ./gradlew clean assembleRelease bundleRelease
+          ./gradlew assembleDebug
     artifacts:
-      - app/build/outputs/apk/release/*.apk
-      - app/build/outputs/bundle/release/*.aab
-    publishing:
-      email:
-        recipients:
-          - rajeev990@gmail.com
-        notify:
-          success: true
-          failure: true
+      - app/build/outputs/apk/debug/*.apk
